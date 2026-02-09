@@ -85,6 +85,12 @@ result = searcher.search(
 
 # 禁用重试（快速失败）
 result = searcher.search("query", max_retries=1)
+
+# 控制 thinking 输出（grok2api 专用）
+result = searcher.search(
+    "query",
+    thinking="disabled"  # 节省 20-50% token
+)
 ```
 
 ## 参数说明
@@ -105,6 +111,14 @@ result = searcher.search("query", max_retries=1)
 - `max_tokens` - 最大响应 token 数（默认 4000）
 - `max_retries` - 最大重试次数（默认 3）
 - `retry_base_delay` - 基础延迟秒数（默认 1.0）
+- `thinking` - 控制思维链输出（grok2api 专用）
+  - `"enabled"` - 显示推理过程
+  - `"disabled"` - 隐藏推理过程（节省 20-50% token）
+  - `None` - 使用服务端默认配置
+- `stream` - 控制流式输出（grok2api 专用）
+  - `True` - 启用流式响应
+  - `False` - 等待完整响应
+  - `None` - 使用服务端默认配置
 
 ## 响应格式
 

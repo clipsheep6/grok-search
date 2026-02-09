@@ -177,10 +177,26 @@ class GrokSearcher:
         # Load or prompt for credentials
         self.api_key, self.base_url, self.api_mode = self._get_credentials(api_key, base_url, api_mode)
 
+    def _normalize_base_url(self, base_url: str) -> str:
+        """Normalize base URL by ensuring it ends with /v1"""
+        if not base_url:
+            return base_url
+
+        # Remove trailing slashes
+        base_url = base_url.rstrip('/')
+
+        # Add /v1 if not present
+        if not base_url.endswith('/v1'):
+            base_url = f"{base_url}/v1"
+            print(f"ℹ️  Auto-normalized base_url to: {base_url}", file=sys.stderr)
+
+        return base_url
+
     def _get_credentials(self, api_key: Optional[str], base_url: Optional[str], api_mode: Optional[str]) -> tuple:
         """Get credentials from args, config file, or prompt user"""
         # Try arguments first
         if api_key and base_url and api_mode:
+            base_url = self._normalize_base_url(base_url)
             return api_key, base_url, api_mode
 
         # Try environment variables
@@ -188,6 +204,7 @@ class GrokSearcher:
         env_url = os.getenv("GROK_BASE_URL")
         env_mode = os.getenv("GROK_API_MODE")
         if env_key and env_url and env_mode:
+            env_url = self._normalize_base_url(env_url)
             return env_key, env_url, env_mode
 
         # Try skill directory config file (Priority 1)
@@ -195,7 +212,8 @@ class GrokSearcher:
             with open(self.skill_config_file, 'r') as f:
                 config = json.load(f)
                 if config.get("api_key") and config.get("base_url") and config.get("api_mode"):
-                    return config["api_key"], config["base_url"], config["api_mode"]
+                    base_url = self._normalize_base_url(config["base_url"])
+                    return config["api_key"], base_url, config["api_mode"]
 
         # Try legacy home directory config file (Priority 2 - backward compatibility)
         if self.legacy_config_file.exists():
@@ -204,7 +222,8 @@ class GrokSearcher:
                 if config.get("api_key") and config.get("base_url") and config.get("api_mode"):
                     print(f"⚠️  Using legacy config from {self.legacy_config_file}", file=sys.stderr)
                     print(f"   Consider migrating to {self.skill_config_file}", file=sys.stderr)
-                    return config["api_key"], config["base_url"], config["api_mode"]
+                    base_url = self._normalize_base_url(config["base_url"])
+                    return config["api_key"], base_url, config["api_mode"]
 
         # Check if running in interactive terminal
         if not sys.stdin.isatty():
@@ -259,6 +278,9 @@ class GrokSearcher:
         if not api_key or not base_url:
             print("❌ API Key and Base URL are required", file=sys.stderr)
             sys.exit(1)
+
+        # Normalize base_url before saving
+        base_url = self._normalize_base_url(base_url)
 
         # Save to skill directory config
         with open(self.skill_config_file, 'w') as f:
@@ -345,7 +367,9 @@ Query: {query}"""
         temperature: float = 0.7,
         max_tokens: int = 4000,
         max_retries: int = 3,
-        retry_base_delay: float = 1.0
+        retry_base_delay: float = 1.0,
+        thinking: Optional[str] = None,
+        stream: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
         Execute search query using Grok API with automatic retry on transient failures.
@@ -358,6 +382,8 @@ Query: {query}"""
             max_tokens: Maximum response tokens
             max_retries: Maximum number of retry attempts (default: 3)
             retry_base_delay: Base delay for exponential backoff in seconds (default: 1.0)
+            thinking: Control thinking output - "enabled"/"disabled"/None (grok2api only)
+            stream: Override stream setting - True/False/None (grok2api only)
 
         Returns:
             Dict with 'content' and 'raw_response' keys, or 'error' on failure
@@ -499,6 +525,12 @@ web_search, x_search, image_generation, code_execution, file_processing, deepsea
             "max_tokens": max_tokens
         }
 
+        # Add grok2api-specific parameters if provided
+        if thinking is not None:
+            payload["thinking"] = thinking
+        if stream is not None:
+            payload["stream"] = stream
+
         # Add tool parameters only for official API
         if self.api_mode == "official":
             payload["tools"] = [{"type": "web_search"}]
@@ -634,6 +666,10 @@ def main():
                        help="Model temperature (0-1, default: 0.7)")
     parser.add_argument("--max-tokens", type=int, default=4000,
                        help="Maximum response tokens (default: 4000)")
+    parser.add_argument("--thinking", choices=["enabled", "disabled"],
+                       help="Control thinking output (grok2api only): 'enabled' or 'disabled'")
+    parser.add_argument("--stream", type=lambda x: x.lower() in ['true', '1', 'yes'],
+                       help="Override stream setting (grok2api only): true/false")
     parser.add_argument("--output", "-o", help="Save output to file")
 
     args = parser.parse_args()
@@ -673,7 +709,9 @@ def main():
                 mode=args.mode,
                 context=context,
                 temperature=args.temperature,
-                max_tokens=args.max_tokens
+                max_tokens=args.max_tokens,
+                thinking=args.thinking,
+                stream=args.stream
             )
 
             if "error" in result:
@@ -698,7 +736,9 @@ def main():
             args.query,
             mode=args.mode,
             temperature=args.temperature,
-            max_tokens=args.max_tokens
+            max_tokens=args.max_tokens,
+            thinking=args.thinking,
+            stream=args.stream
         )
 
         if "error" in result:
