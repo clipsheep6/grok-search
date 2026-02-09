@@ -1,0 +1,5 @@
+{
+  "api_key": "your-grok-api-key-here",
+  "base_url": "https://api.x.ai/v1",
+  "api_mode": "official"
+}
