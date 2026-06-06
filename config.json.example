@@ -1,5 +1,13 @@
 {
-  "api_key": "your-grok-api-key-here",
-  "base_url": "https://api.x.ai/v1",
-  "api_mode": "official"
+  "api_key": "sk-your-key-here",
+  "base_url": "https://your-grok2api-host/proxy/grok",
+  "verify_ssl": false,
+  "disable_proxy": true,
+  "concurrency": 5,
+  "stagger_ms": 1000,
+  "models": {
+    "default": ["grok-4.3-high", "grok-4.20-multi-agent-low"],
+    "deep": ["grok-4.3-high", "grok-4.20-multi-agent-medium", "grok-4.20-multi-agent-low"],
+    "degrade": "grok-4.3-high"
+  }
 }

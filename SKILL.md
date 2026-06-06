@@ -1,483 +1,157 @@
 ---
 name: grok-search
-description: "Advanced semantic web search powered by Grok-4.1. Provides comprehensive research with real-time information, source citations, and analytical synthesis. Use when: (1) Need competitive analysis or market intelligence, (2) Require synthesis across multiple sources with expert analysis, (3) Basic WebSearch returns too many irrelevant results, (4) Researching patents, industry trends, or technical topics, (5) Need social media sentiment analysis, (6) Want analytical insights alongside factual data. Superior to basic search for complex queries requiring deep understanding and multi-source synthesis."
+description: "Web search via Grok. For current/post-cutoff info, multi-source synthesis, deep research, event tracking, comparisons."
 ---
 
 # Grok Search
 
-Advanced semantic search using Grok-4.1 model for comprehensive research and analysis.
+Concurrent Grok web search over a grok2api proxy. One call = one search
+primitive: fanout across models and/or angles, then return a compact answer
+plus consensus-ranked sources.
 
-## Overview
+Use it for current info, multi-source synthesis, comparisons, landscape scans,
+and deep technical research. Do not use it for things you already know or for
+reading one known URL directly.
 
-Grok Search leverages the Grok-4.1 model's superior semantic understanding and real-time web access to provide deep, synthesized research results. Unlike basic search tools, Grok excels at understanding context, connecting disparate information, and providing analytical insights alongside factual data.
+## Run
 
-**Key advantages:**
-- **Semantic understanding** - Analyzes query intent, not just keywords
-- **Intelligent tool selection** - Automatically chooses optimal tools (web_search, x_search, code_execution, etc.)
-- **Multi-source synthesis** - Combines insights from web, social media, and other sources
-- **Real-time access** - Current information with source citations
-- **Parallel search capability** - Multi-path concurrent search for complex queries
-
-## Quick Start
-
-### Using the Skill (Recommended)
-
-Basic usage:
-```
-grok-search What are the latest AI agent trends in 2026?
-```
-
-With optional parameters:
-```
-grok-search What are the latest AI agent trends in 2026? mode=summary api_mode=reverse_proxy
-```
-
-### Direct Script Usage
-
-For structured research reports:
 ```bash
-python3 scripts/grok_search.py "Compare Notion vs Obsidian for team collaboration in 2026"
+cd /path/to/skills/grok-search
+python3 scripts/grok_search.py "<query>" [options]
 ```
 
-For analytical synthesis:
-```bash
-python3 scripts/grok_search.py "AI agent framework trends" --mode summary
-```
+Rules:
 
-For interactive research:
-```bash
-python3 scripts/grok_search.py --interactive
-```
+- The main query must be quoted.
+- Multi-angle mode uses repeated `--angle`, not extra bare words.
+- Default = 2 heterogeneous runs in parallel; most lookups should start there.
+- If you raise effective concurrency above 2, the launcher now auto-staggers request starts unless you override it.
 
-## Parameters
+Core options:
 
-- **query** (required): Your search query or research question
-- **mode** (optional):
-  - `report` (default): Structured reports with executive summary, key findings, and complete source list
-  - `summary`: Grok's analytical synthesis with insights
-- **api_mode** (optional): `official` or `reverse_proxy` (see api_reference.md for details)
+- `--deep` — 3-way fanout + breadth prompt
+- `--fanout N` — override consensus run count outside angle mode
+- `--angle "<text>"` — distinct evidence path; repeatable
+- `--no-base-query` — in angle mode, run only explicit angles; useful for discovery sweeps
+- `--days N` — relative recency window
+- `--focus "<text>"` — soft source/platform hint
+- `--verify-urls` — mark final URLs as `live`, `dead`, or `unverified`
+- `--json` — minimal machine-readable wrapper for chaining
+- `--concurrency N` — override in-flight cap; otherwise config/fallback decides it
+- `--stagger-ms N` — override launch staggering; default auto-enables when concurrency > 2
+- `--deadline N` — whole-search wall-clock cap
 
-## Usage Modes
+See `README.md` for extended examples and `references/api_reference.md` for the
+full CLI contract.
 
-### Report Mode (Default)
-Returns structured reports with executive summary, key findings with sources, detailed analysis by theme, and complete source list. Use for comprehensive research, documentation, and sharing with stakeholders.
+## Choose the lightest protocol
 
-### Summary Mode
-Returns Grok's analytical synthesis with insights and source URLs. Use for quick insights, expert analysis, and when you need Grok's perspective.
+- **Quick lookup** — default consensus only
+- **Verified lookup** — default + `--verify-urls`
+- **Deep research** — `--deep`, optionally `--verify-urls`, prefer `--json` if another tool will continue
+- **Multi-angle research** — use `--angle` only when you need genuinely different evidence paths
+- **Discovery sweeps** — prefer multiple small calls over one giant angle batch; for angle sweeps, `--no-base-query` is often the right default
 
-### Interactive Mode
-Multi-turn conversation for iterative refinement and follow-up questions. Use for exploratory research, drilling down into specific areas, and complex investigations.
+If the question is time-sensitive, add `--days N`. If domain authority matters,
+add `--focus`.
 
----
+## Angle rules
 
-## 🔀 Parallel Search Strategy (NEW)
+Angles decide quality. Use them to split **evidence paths**, not to restate the
+same question.
 
-### Important Note
+- Each angle must be self-contained and carry all constraints.
+- Comparison questions must keep one direct-comparison angle, not just `A` and `B`.
+- Good angle sets are usually 3-way, not 6-way.
+- If many angles collapse to the same domains/claims, the base query is too vague.
 
-**Parallel search is NOT automatically executed by the grok-search skill itself.** Instead, this strategy is a **guideline for the main Claude Code agent** to manually decompose queries and launch multiple grok-search subagents in parallel.
+Reliable angle patterns:
 
-### When to Use Parallel Search
+- **Comparison** — `A vs B direct`, `A limits`, `B limits`
+- **Recent changes** — `announcement`, `migration/breaking changes`, `incidents`
+- **Mechanism** — `mechanism`, `counterexample`, `boundary conditions`
+- **Controversy** — `best support`, `best critique`, `primary-source reality`
+- **Stakeholders** — buyer / operator / regulator / independent reviewer
 
-When you (the main agent) detect queries matching specific patterns, you should manually decompose them into sub-queries and launch multiple subagents using the Task tool with `subagent_type="general-purpose"`, each calling the grok-search skill.
+## Full-coverage deep tech insight
 
-### Query Classification & Execution Strategy
+Use this when the goal is a deep read of one technology across the whole
+evidence field. This is one protocol with four axes:
 
-#### Strategy A: Independent Multi-Topic (Pure Parallel) ✅
+- **Academic** — papers, benchmarks, surveys, arXiv, paper-linked repos
+- **Industry** — official docs, launch posts, engineering blogs, case studies, postmortems
+- **Social signal** — X.com, Hacker News, Reddit, practitioner discussion
+- **Adoption / reality** — GitHub issues/PRs, RFCs/design docs, integration code, migration guides, example apps, deploy notes, operator writeups, incident threads, repro repos
 
-**Trigger patterns:**
-- "分别介绍 A、B、C"
-- "Introduce A, B, and C separately"
-- "各自的特点" / "each of their features"
-- "分别分析" / "analyze separately"
+Use the social axis to discover signals and disputes, not to conclude on its
+own. Use the adoption/reality axis to inspect the actual technical path, not
+just buzz or ecosystem lists.
 
-**Execution:**
-```
-User: "分别介绍 Rust、Go、Python 的特点"
+Recommended shape:
 
-Parallel decomposition:
-├─ Subagent 1: "Rust 编程语言的核心特点和优势"
-├─ Subagent 2: "Go 编程语言的核心特点和优势"
-└─ Subagent 3: "Python 编程语言的核心特点和优势"
+- Discovery pass = 2-4 explicit axes, often with `--no-base-query`
+- Synthesis pass = add a base query only when a cross-axis backbone is useful
+- Synthesize by decision dimension, not by source type
 
-Main agent: Simple aggregation of 3 independent results
-```
+Default synthesis dimensions:
 
-**Information loss risk:** 🟢 Low (queries are truly independent)
+- `capability`
+- `reliability`
+- `operability`
+- `cost`
+- `ecosystem / adoption`
+- `failure modes`
+- `open questions`
 
----
+Two common endgames:
 
-#### Strategy B: Multi-Dimension Analysis (Pure Parallel) ✅
+- **Report mode** — keep breadth, contradictions, caveats, and source provenance
+- **Action mode** — collapse evidence into `adopt / pilot / defer / avoid / monitor` decisions
 
-**Trigger patterns:**
-- "全面分析 X" / "comprehensive analysis of X"
-- "多维度分析" / "multi-dimensional analysis"
-- "深入分析" / "in-depth analysis"
-- "从...角度分析" / "analyze from ... perspectives"
+## Trust and stop rules
 
-**Execution:**
-```
-User: "全面分析 Rust：性能、生态、学习曲线、应用场景"
+`×N` means a URL was cited by N runs. It is a salience signal, not an authority
+score. Always prioritize primary, authoritative, and fresh sources over raw `×N`.
 
-Parallel decomposition:
-├─ Subagent 1: "Rust 的性能特点和基准测试"
-├─ Subagent 2: "Rust 生态系统和库支持现状"
-├─ Subagent 3: "Rust 学习曲线和入门难度分析"
-└─ Subagent 4: "Rust 的典型应用场景和案例"
+Interpret signals this way:
 
-Main agent: Structured integration by dimension
-```
+- `consensus: high` — strong overlap; if a primary source exists, stop searching and read it directly
+- `consensus: mixed` — useful result, but verify key URLs and check for missing primary sources
+- `consensus: low` — unresolved / fast-moving / branch-worthy; do not collapse too early
 
-**Information loss risk:** 🟡 Medium (dimensions may have cross-references)
+Interpret URL status this way:
 
----
+- `live` — resolved successfully
+- `dead` — clearly broken
+- `unverified` — not confirmed within budget; neither trust nor discard automatically
 
-#### Strategy C: Comparison Query (Hybrid Parallel) ⚠️
+Escalate or stop:
 
-**Trigger patterns:**
-- "对比 A 和 B" / "compare A and B"
-- "A vs B"
-- "A 和 B 的区别" / "differences between A and B"
-- "哪个更好" / "which is better"
+- If many final URLs are `dead` or `unverified`, narrow the query/focus before spending more budget.
+- If angle mode yields mostly `×1` URLs and no stable primary sources, tighten scope.
+- If social claims do not survive academic / industry / adoption cross-checks, keep them as signals, not findings.
+- If academic excitement is strong but adoption evidence is weak, label the technology frontier / emerging, not production-proven.
+- If industry claims are strong but GitHub / operator / migration evidence is weak or negative, treat the vendor narrative as incomplete.
 
-**Execution (Hybrid Strategy):**
-```
-User: "对比 Claude Sonnet 4.5 和 GPT-4o 的能力"
-
-Hybrid parallel decomposition:
-├─ Subagent 1: "Claude Sonnet 4.5 vs GPT-4o 对比评测和用户反馈" ← Preserve original comparison
-├─ Subagent 2: "Claude Sonnet 4.5 的核心能力、特点和优势"      ← Detailed A
-├─ Subagent 3: "GPT-4o 的核心能力、特点和优势"                ← Detailed B
-└─ Subagent 4: "Claude Sonnet 4.5 vs GPT-4o 在实际应用中的表现对比" ← Supplementary comparison
-
-Main agent synthesis:
-1. Prioritize Subagent 1 & 4 comparison results (most direct)
-2. Use Subagent 2 & 3 for depth and details
-3. Cross-validate for consistency
-4. Generate comprehensive comparison report
-```
-
-**Why hybrid?**
-- Preserves direct comparison articles from search engines
-- Adds detailed individual analysis for depth
-- Minimizes information loss from query decomposition
-
-**Information loss risk:** 🟡 Medium (mitigated by preserving original query)
-
----
-
-#### Strategy D: Sequential Query (Serial Only) ❌
-
-**Trigger patterns:**
-- "先...然后..." / "first...then..."
-- "首先...接着..." / "firstly...next..."
-- "基于...进行..." / "based on...do..."
-- "找出...并对比..." / "find...and compare..."
-
-**Execution (Serial):**
-```
-User: "找出 2024 年最流行的 3 个 AI 模型，然后对比它们的能力"
-
-Step 1 (Serial): Search "2024 年最流行的 AI 模型"
-         Result: Claude Sonnet 4.5, GPT-4o, Gemini 2.0
-
-Step 2 (Parallel based on Step 1):
-├─ Subagent 1: "Claude Sonnet 4.5 vs GPT-4o vs Gemini 2.0 对比"
-├─ Subagent 2: "Claude Sonnet 4.5 核心能力"
-├─ Subagent 3: "GPT-4o 核心能力"
-└─ Subagent 4: "Gemini 2.0 核心能力"
-
-Step 3: Main agent comprehensive comparison
-```
-
-**Information loss risk:** 🔴 High if forced to parallel (dependencies broken)
-
----
-
-### Implementation Guidelines
-
-#### 1. Query Analysis Phase
-
-```
-When user submits a query:
-
-1. Detect query type:
-   - Check for independent multi-topic patterns → Strategy A
-   - Check for multi-dimension patterns → Strategy B
-   - Check for comparison patterns → Strategy C
-   - Check for sequential patterns → Strategy D
-   - Default → Single query (no parallelization)
-
-2. Validate parallelizability:
-   - Are sub-queries truly independent?
-   - Will decomposition lose critical context?
-   - Is the overhead worth it? (minimum 2 sub-queries)
-
-3. Decide execution mode:
-   - Pure parallel (A, B)
-   - Hybrid parallel (C)
-   - Serial (D)
-   - Single query (default)
-```
-
-#### 2. Parallel Execution Phase
-
-```
-For parallel execution (Main Agent's responsibility):
-
-1. Decompose query into 2-5 sub-queries
-   - Each sub-query must be self-contained
-   - Include necessary context in each sub-query
-   - Avoid overlap to minimize redundancy
-
-2. Launch subagents in parallel (single message with multiple Task calls):
+## Research loop
 
-   # Example: Main agent launches parallel searches
-   Task(subagent_type="general-purpose",
-        prompt="Use the grok-search skill to search: {sub_query_1}",
-        description="Search task 1",
-        name="searcher-1")
-   Task(subagent_type="general-purpose",
-        prompt="Use the grok-search skill to search: {sub_query_2}",
-        description="Search task 2",
-        name="searcher-2")
-   ...
+Use this loop for multi-step research:
 
-3. Wait for all subagents to complete
-   - Collect all results
-   - Check for errors or incomplete results
-```
+1. **Broad** — start with one well-shaped query
+2. **Split** — identify 2-4 real branches or evidence axes
+3. **Drill** — run `--deep` or targeted angles per branch
+4. **Cross-check** — prioritize primary/authoritative/fresh sources
+5. **Synthesize** — report mode for completeness, action mode for technical direction
 
-#### 3. Synthesis Phase
+Typical task → protocol mapping:
 
-```
-After collecting all results:
+- Official fact check → default + `--focus "official docs"` + `--verify-urls`
+- Recent changes → default + `--days N`; add timeline angles only if one pass is too collapsed
+- Comparison / vendor choice → base + one direct-comparison angle + 1-2 limits angles
+- Unfamiliar landscape → broad first, then deep-drill top 2-4 branches
+- Controversy / disagreement → support / critique / primary-reality angles
+- Root cause / mechanism → mechanism / counterexample / boundary angles
+- Full technical insight on one technology → academic / industry / social / adoption axes
 
-1. For Strategy A (Independent):
-   - Simple aggregation
-   - Organize by topic
-   - Remove duplicates
-
-2. For Strategy B (Multi-dimension):
-   - Structured integration by dimension
-   - Identify cross-references
-   - Build coherent narrative
-
-3. For Strategy C (Comparison):
-   - Prioritize direct comparison results
-   - Use detailed results for depth
-   - Cross-validate for consistency
-   - Generate comparison table/summary
-
-4. Quality checks:
-   - Identify contradictions
-   - Check for missing information
-   - Validate source citations
-```
-
-#### 4. Context Preservation Techniques
-
-**For comparison queries (Strategy C):**
-```
-✅ Good sub-query design (includes context):
-- "Rust 相比 Go 的性能优势和劣势"
-- "Go 相比 Rust 的性能优势和劣势"
-
-❌ Bad sub-query design (loses context):
-- "Rust 性能"
-- "Go 性能"
-```
-
-**For multi-dimension queries (Strategy B):**
-```
-✅ Good sub-query design (self-contained):
-- "Rust 的性能特点和基准测试结果"
-- "Rust 生态系统的成熟度和库支持情况"
-
-❌ Bad sub-query design (too vague):
-- "Rust 性能"
-- "Rust 生态"
-```
-
----
-
-### Performance Expectations
-
-| Strategy | Serial Time | Parallel Time | Speedup | Information Loss |
-|----------|-------------|---------------|---------|------------------|
-| A (Independent) | 30s (3 queries) | ~12s | 2.5x | 🟢 Minimal |
-| B (Multi-dim) | 40s (4 queries) | ~15s | 2.7x | 🟡 Low-Medium |
-| C (Comparison) | 40s (4 queries) | ~15s | 2.7x | 🟡 Low (mitigated) |
-| D (Sequential) | 50s (2 phases) | N/A | 1x | 🔴 High if parallel |
-
-**Note:** Actual speedup depends on API response time, network latency, and Claude Code's subagent scheduling overhead.
-
----
-
-### Constraints & Limitations
-
-1. **Maximum parallel subagents:** 5 (Claude Code limit)
-2. **Minimum sub-queries for parallelization:** 2
-3. **Subagent communication:** Subagents cannot see each other's results during execution
-4. **Cost:** Each subagent consumes API tokens independently
-5. **Complexity overhead:** Parallel execution adds orchestration complexity
-
----
-
-### Example Workflows
-
-#### Example 1: Independent Multi-Topic (Strategy A)
-
-```
-User: "分别介绍 Rust、Go、Python 的特点"
-
-Detection: Independent multi-topic pattern detected
-Strategy: A (Pure Parallel)
-
-Execution:
-[Main Agent] Decomposing query into 3 independent sub-queries...
-[Main Agent] Launching 3 parallel subagents...
-
-├─ [Subagent 1] Searching: "Rust 编程语言的核心特点和优势"
-├─ [Subagent 2] Searching: "Go 编程语言的核心特点和优势"
-└─ [Subagent 3] Searching: "Python 编程语言的核心特点和优势"
-
-[Main Agent] All subagents completed. Aggregating results...
-
-Output:
-# Rust、Go、Python 特点对比
-
-## Rust
-[Subagent 1 results]
-
-## Go
-[Subagent 2 results]
-
-## Python
-[Subagent 3 results]
-```
-
-#### Example 2: Comparison Query (Strategy C)
-
-```
-User: "对比 Claude Sonnet 4.5 和 GPT-4o 的能力"
-
-Detection: Comparison pattern detected
-Strategy: C (Hybrid Parallel)
-
-Execution:
-[Main Agent] Using hybrid parallel strategy to preserve comparison context...
-[Main Agent] Launching 4 parallel subagents...
-
-├─ [Subagent 1] Searching: "Claude Sonnet 4.5 vs GPT-4o 对比评测"
-├─ [Subagent 2] Searching: "Claude Sonnet 4.5 核心能力和特点"
-├─ [Subagent 3] Searching: "GPT-4o 核心能力和特点"
-└─ [Subagent 4] Searching: "Claude Sonnet 4.5 vs GPT-4o 用户反馈"
-
-[Main Agent] All subagents completed. Synthesizing comparison report...
-[Main Agent] Prioritizing direct comparison results...
-[Main Agent] Cross-validating with detailed analysis...
-
-Output:
-# Claude Sonnet 4.5 vs GPT-4o 能力对比
-
-## 执行摘要
-[Synthesized from Subagent 1 & 4]
-
-## 详细对比
-| 维度 | Claude Sonnet 4.5 | GPT-4o |
-|------|-------------------|--------|
-| ... | [From Subagent 2] | [From Subagent 3] |
-
-## 用户反馈
-[From Subagent 4]
-
-## 结论
-[Synthesized analysis]
-```
-
-#### Example 3: Sequential Query (Strategy D)
-
-```
-User: "找出 2024 年最流行的 3 个 AI 模型，然后对比它们的能力"
-
-Detection: Sequential pattern detected
-Strategy: D (Serial)
-
-Execution:
-[Main Agent] Sequential query detected. Executing in phases...
-
-Phase 1 (Serial):
-[Main Agent] Searching: "2024 年最流行的 AI 模型"
-[Main Agent] Result: Claude Sonnet 4.5, GPT-4o, Gemini 2.0
-
-Phase 2 (Parallel based on Phase 1):
-[Main Agent] Launching 4 parallel subagents for comparison...
-
-├─ [Subagent 1] Searching: "Claude Sonnet 4.5 vs GPT-4o vs Gemini 2.0"
-├─ [Subagent 2] Searching: "Claude Sonnet 4.5 核心能力"
-├─ [Subagent 3] Searching: "GPT-4o 核心能力"
-└─ [Subagent 4] Searching: "Gemini 2.0 核心能力"
-
-[Main Agent] Synthesizing comprehensive comparison...
-
-Output:
-# 2024 年最流行 AI 模型对比
-
-## 最流行的 3 个模型
-1. Claude Sonnet 4.5
-2. GPT-4o
-3. Gemini 2.0
-
-## 能力对比
-[Comprehensive comparison table and analysis]
-```
-
----
-
-## Reference Documentation
-
-Load these references as needed to optimize your research workflow:
-
-### [search_patterns.md](references/search_patterns.md)
-Query templates, use cases, workflows, and best practices for different research scenarios.
-
-**Load when you need:**
-- Guidance on crafting effective queries for specific scenarios (competitive analysis, patents, technical research)
-- Example workflows for common research tasks
-- Query refinement patterns and optimization techniques
-- Best practices for effective research
-
-### [tool_triggers.md](references/tool_triggers.md)
-How Grok automatically selects tools (web_search, x_search, code_execution, etc.) based on query patterns.
-
-**Load when you need:**
-- Understanding how Grok chooses tools for different query types
-- Debugging tool selection behavior
-- Learning which query patterns trigger specific Grok capabilities
-
-### [api_reference.md](references/api_reference.md)
-Technical API documentation, configuration details, and troubleshooting.
-
-**Load when you need:**
-- Setting up API credentials and configuration
-- Understanding API modes (official vs reverse_proxy)
-- Troubleshooting connection or authentication issues
-- Advanced options (temperature, token limits, output saving)
-- Technical details about request/response format
-
-## Quick Troubleshooting
-
-**"API credentials not found"**
-→ See api_reference.md "Configuration Setup" section
-
-**"Connection timeout"**
-→ See api_reference.md "Troubleshooting" section
-
-**Poor results quality**
-→ See search_patterns.md "Query Refinement Patterns"
-
-**Need query examples**
-→ See search_patterns.md for templates by domain
-
-**Parallel search not triggering**
-→ Check if query matches trigger patterns in "Parallel Search Strategy" section
+Output is self-labeling. A `✗` or `M/N runs` line means partial failure: the
+answer may still be useful, but coverage is thinner.
