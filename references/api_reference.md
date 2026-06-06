@@ -36,6 +36,7 @@ depth/breadth. Avoid `multi-agent-xhigh` (slow, no gain), `0309-non-reasoning`
 | `query` | one required query string; quote multi-word queries |
 | `--deep` | breadth extraction + wider fanout |
 | `--fanout N` | concurrent runs in consensus mode (default 2; `--deep` 3) |
+| `--preset NAME` | expand a common protocol into angles when `--angle` is omitted; one of `comparison`, `controversy`, `recent-change`, `mechanism`, `deep-tech`, `tech-planning`, `discovery`; `tech-insight` remains an alias |
 | `--angle T` | distinct angle, repeatable; angle mode = base query + each angle |
 | `--no-base-query` | in angle mode, skip the extra base query and run only explicit angles |
 | `--days N` | recency window (from now) |

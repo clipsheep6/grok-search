@@ -31,6 +31,7 @@ Core options:
 
 - `--deep` — 3-way fanout + breadth prompt
 - `--fanout N` — override consensus run count outside angle mode
+- `--preset comparison|controversy|recent-change|mechanism|deep-tech|tech-planning|discovery` — expand a common protocol into angles
 - `--angle "<text>"` — distinct evidence path; repeatable
 - `--no-base-query` — in angle mode, run only explicit angles; useful for discovery sweeps
 - `--days N` — relative recency window
@@ -49,7 +50,8 @@ full CLI contract.
 - **Quick lookup** — default consensus only
 - **Verified lookup** — default + `--verify-urls`
 - **Deep research** — `--deep`, optionally `--verify-urls`, prefer `--json` if another tool will continue
-- **Multi-angle research** — use `--angle` only when you need genuinely different evidence paths
+- **Preset research** — use `--preset` for common comparison, controversy, recent-change, mechanism, deep-tech, tech-planning, or discovery protocols
+- **Custom multi-angle research** — use explicit `--angle` only when the preset does not fit
 - **Discovery sweeps** — prefer multiple small calls over one giant angle batch; for angle sweeps, `--no-base-query` is often the right default
 
 If the question is time-sensitive, add `--days N`. If domain authority matters,
@@ -72,6 +74,15 @@ Reliable angle patterns:
 - **Mechanism** — `mechanism`, `counterexample`, `boundary conditions`
 - **Controversy** — `best support`, `best critique`, `primary-source reality`
 - **Stakeholders** — buyer / operator / regulator / independent reviewer
+
+Use `--preset tech-planning` for 5-look / 3-decide technology strategy work:
+industry/trends, market/customers, competitors, self, and opportunities. After
+retrieval, synthesize into target, strategy, and control points / execution.
+The industry/trends look should sample technical signal sources, not just macro
+trend language: academic papers, patents, standards, industry engineering blogs,
+official roadmaps, X.com top experts, Hacker News/community discussion,
+regulation, capital, and ecosystem shifts. The self look must use only
+user-provided internal context and otherwise surface questions to evaluate.
 
 ## Full-coverage deep tech insight
 

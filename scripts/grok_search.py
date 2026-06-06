@@ -509,6 +509,52 @@ _AXIS_KEYWORDS = {
 }
 
 
+_PRESET_ANGLE_SUFFIXES = {
+    'comparison': (
+        'direct comparison benchmarks tradeoffs and primary sources',
+        'first named option strengths limits risks failure modes and primary sources',
+        'second named option strengths limits risks failure modes and primary sources',
+    ),
+    'controversy': (
+        'best supporting evidence primary sources and strongest claims',
+        'best critique counterevidence limitations and failed assumptions',
+        'primary source reality what authoritative sources actually show',
+    ),
+    'recent-change': (
+        'official announcements release notes and dated primary sources',
+        'breaking changes migrations deprecations and compatibility risks',
+        'incidents regressions community reports and unresolved issues',
+    ),
+    'mechanism': (
+        'mechanism architecture internals and causal explanation',
+        'counterexamples boundary conditions and where the mechanism fails',
+        'operational evidence reproduction details and failure modes',
+    ),
+    'deep-tech': (
+        'academic papers benchmarks surveys arXiv and research repos',
+        'official docs product announcements engineering blogs and postmortems',
+        'X.com top experts Hacker News Reddit practitioner discussions signals disputes and linked primary sources',
+        'GitHub issues PRs RFCs design docs integration code migration guides example apps deployment notes operator writeups and incident reports',
+    ),
+    'tech-planning': (
+        'industry and trend signals from academic papers patents standards industry engineering blogs official roadmaps X.com top experts Hacker News regulation funding and ecosystem shifts',
+        'market customer segments buyer pain adoption blockers jobs to be done and budget signals',
+        'competitors vendors alternatives benchmarks positioning roadmap and moat',
+        'self fit assessment framework current capabilities assets constraints architecture talent data operating gaps and questions to evaluate; use only user-provided internal context',
+        'opportunity whitespace timing entry points risks and leverage for technical strategy',
+    ),
+    'discovery': (
+        'official primary sources docs announcements and specs',
+        'implementation adoption GitHub issues PRs examples and operator notes',
+        'criticism limitations incidents and unresolved questions',
+    ),
+}
+
+_PRESET_ALIASES = {
+    'tech-insight': 'tech-planning',
+}
+
+
 def _axis_overlay_for_query(query: str) -> Optional[str]:
     lower = query.lower()
     scored: List[Tuple[int, str]] = []
@@ -520,6 +566,14 @@ def _axis_overlay_for_query(query: str) -> Optional[str]:
         return None
     _, best_axis = max(scored)
     return _AXIS_OVERLAYS[best_axis]
+
+
+def _preset_angles(query: str, preset: Optional[str]) -> List[str]:
+    if not preset:
+        return []
+    preset = _PRESET_ALIASES.get(preset, preset)
+    suffixes = _PRESET_ANGLE_SUFFIXES[preset]
+    return [f'{query} {suffix}' for suffix in suffixes]
 
 
 def _build_query(
@@ -985,6 +1039,8 @@ def main() -> None:
                         help='Deep research: breadth extraction + heterogeneous fanout + consensus')
     parser.add_argument('--fanout', type=_positive_int, default=None,
                         help='Concurrent runs (default 2; --deep default 3); global cap applies')
+    parser.add_argument('--preset', choices=sorted(set(_PRESET_ANGLE_SUFFIXES) | set(_PRESET_ALIASES)),
+                        help='Expand a common research protocol into explicit angles when --angle is omitted')
     parser.add_argument('--angle', action='append', default=[],
                         help='Explicit research angle (repeatable); each runs concurrently')
     parser.add_argument('--no-base-query', action='store_true',
@@ -1012,8 +1068,13 @@ def main() -> None:
     if not query:
         parser.error('Query required')
 
-    # Warn if --fanout is given alongside --angle (it is ignored in angle mode).
     angles: List[str] = list(args.angle)
+    if not angles:
+        angles = _preset_angles(query, args.preset)
+    elif args.preset:
+        print('⚠️  --preset is ignored when explicit --angle values are provided', file=sys.stderr)
+
+    # Warn if --fanout is given alongside angle mode (it is ignored there).
     if angles and args.fanout is not None:
         print('⚠️  --fanout is ignored in angle mode', file=sys.stderr)
 

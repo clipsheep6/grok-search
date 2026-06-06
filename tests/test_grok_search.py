@@ -623,6 +623,39 @@ def test_compare_protocol_preserves_head_to_head_angle():
     assert 'prompt:A vs B direct benchmarks' in prompts
 
 
+def test_preset_expands_common_angle_set():
+    """Presets should turn one query into scenario-specific evidence angles."""
+    angles = grok_search._preset_angles('A vs B', 'comparison')
+    assert len(angles) == 3
+    assert angles[0].startswith('A vs B ')
+    assert 'direct comparison' in angles[0]
+
+
+def test_tech_planning_preset_uses_five_look_angles():
+    """The technology-planning preset should map 5-look strategy into evidence angles."""
+    angles = grok_search._preset_angles('AI coding agents', 'tech-planning')
+    assert len(angles) == 5
+    joined = '\n'.join(angles)
+    assert 'industry and trend signals' in joined
+    assert 'academic papers patents standards' in joined
+    assert 'X.com top experts Hacker News' in joined
+    assert 'market customer segments' in joined
+    assert 'competitors vendors alternatives' in joined
+    assert 'self fit assessment framework' in joined
+    assert 'use only user-provided internal context' in joined
+    assert 'opportunity whitespace timing' in joined
+
+
+def test_tech_insight_alias_stays_compatible():
+    """The old tech-insight name should remain as a compatibility alias."""
+    assert grok_search._preset_angles('q', 'tech-insight') == grok_search._preset_angles('q', 'tech-planning')
+
+
+def test_empty_preset_returns_no_angles():
+    """Without a preset, the default path should remain consensus mode."""
+    assert grok_search._preset_angles('query', None) == []
+
+
 def test_angle_mode_query_roles_are_layered():
     """Angle mode should give the base query a backbone role and angles an evidence-path role."""
     models = {
