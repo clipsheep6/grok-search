@@ -379,9 +379,10 @@ def _build_output_payload(
     merged: Dict[str, Any],
     primary_summary: str,
     source_rows: List[Dict[str, Any]],
+    planned_angles: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     signal = _consensus_signal(merged)
-    return {
+    payload = {
         'query': query,
         'tier': tier,
         'summary': primary_summary,
@@ -391,6 +392,27 @@ def _build_output_payload(
         },
         'consensus': signal,
         'sources': source_rows,
+    }
+    if planned_angles is not None:
+        payload['planned_angles'] = planned_angles
+    return payload
+
+
+def _build_planned_angles_payload(
+    angles: List[str],
+    preset: Optional[str],
+    include_base_query: bool,
+    angle_fanout: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    if not angles:
+        return None
+    normalized_preset = _PRESET_ALIASES.get(preset, preset) if preset else None
+    return {
+        'preset': normalized_preset,
+        'include_base_query': include_base_query,
+        'angle_fanout': max(1, angle_fanout) if angle_fanout is not None else 1,
+        'count': len(angles),
+        'items': [{'index': i, 'text': angle} for i, angle in enumerate(angles)],
     }
 
 
@@ -1159,6 +1181,12 @@ def main() -> None:
         merged=merged,
         primary_summary=(primary.get('content') or '').strip(),
         source_rows=source_rows,
+        planned_angles=_build_planned_angles_payload(
+            angles=angles,
+            preset=args.preset if not args.angle else None,
+            include_base_query=not args.no_base_query,
+            angle_fanout=args.angle_fanout,
+        ),
     )
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

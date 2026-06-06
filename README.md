@@ -49,6 +49,10 @@
 - `dead` → 明确失效
 - `unverified` → 在当前预算内未确认，既不要盲信，也不要直接丢弃
 
+`--deadline N` 是整次搜索共享的挂钟预算，覆盖 fanout、降级重试和 URL
+校验。它的意义是防止一次检索无限拖长；预算耗尽时，脚本会丢弃未完成
+run 或跳过后续校验，但它不是对底层网络请求的强制进程级 kill。
+
 ### 查询构造建议
 
 **时效性**
@@ -63,6 +67,7 @@
 - 需要给人快速阅读：默认 markdown
 - 需要交给下游 agent / 脚本继续处理：优先 `--json`
 - 需要对外引用 URL：优先 `--verify-urls`
+- `--json` 在 angle / preset 模式会带 `planned_angles`，记录实际展开的角度、是否包含 base query、preset 名称和 `angle_fanout`，便于复盘和 A/B 对比
 
 ### Search Tactics
 

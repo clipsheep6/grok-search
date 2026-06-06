@@ -45,7 +45,7 @@ depth/breadth. Avoid `multi-agent-xhigh` (slow, no gain), `0309-non-reasoning`
 | `--sources-limit N` | max URLs printed (30) |
 | `--concurrency N` | global in-flight cap (CLI overrides config; fallback 4) |
 | `--stagger-ms N` | delay between launching upstream requests; auto-default `1000` when effective concurrency > 2 |
-| `--deadline N` | wall-clock ceiling for the whole search, including degrade fallback (180) |
+| `--deadline N` | shared wall-clock budget for the whole search, including fanout, degrade fallback, and URL verification (180); spent budget drops/skips unfinished work, not a hard process kill |
 | `--model M` | force one model |
 | `--verify-urls` | best-effort check of the final emitted URLs only (`live` / `dead` / `unverified`); shares the same deadline budget |
 | `--json` | emit a minimal machine-readable wrapper instead of markdown |
@@ -76,6 +76,7 @@ When `--json` is enabled, the script emits a script-owned wrapper with:
 - `consensus.unique_sources`
 - `consensus.multi_cited_sources`
 - `sources[]` with `url`, `count`, `status`
+- optional `planned_angles` in angle/preset mode, with `preset`, `include_base_query`, `angle_fanout`, `count`, and `items[]`
 
 ## Errors
 

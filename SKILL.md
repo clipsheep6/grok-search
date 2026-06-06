@@ -41,7 +41,7 @@ Core options:
 - `--json` — minimal machine-readable wrapper for chaining
 - `--concurrency N` — override in-flight cap; otherwise config/fallback decides it
 - `--stagger-ms N` — override launch staggering; default auto-enables when concurrency > 2
-- `--deadline N` — whole-search wall-clock cap
+- `--deadline N` — shared wall-clock budget for fanout, degrade, and URL checks; slow work may be dropped or skipped when budget is spent
 
 See `README.md` for extended examples and `references/api_reference.md` for the
 full CLI contract.
@@ -170,3 +170,7 @@ Typical task → protocol mapping:
 
 Output is self-labeling. A `✗` or `M/N runs` line means partial failure: the
 answer may still be useful, but coverage is thinner.
+
+In `--json` angle or preset mode, `planned_angles` records the actual expanded
+evidence paths, base-query policy, preset name, and per-angle fanout. Use it for
+replay and A/B evaluation; do not treat it as an automatic research plan.

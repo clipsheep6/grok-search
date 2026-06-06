@@ -539,6 +539,37 @@ def test_build_output_payload_minimal_schema():
     assert payload['runs'] == {'total': 2, 'ok': 2}
     assert payload['consensus']['level'] in {'high', 'mixed', 'low'}
     assert payload['sources'][0]['status'] == 'live'
+    assert 'planned_angles' not in payload
+
+
+def test_build_planned_angles_payload_for_preset():
+    """Angle metadata should make preset-expanded runs replayable by downstream agents."""
+    payload = grok_search._build_planned_angles_payload(
+        angles=['q industry trends', 'q competitors'],
+        preset='tech-insight',
+        include_base_query=False,
+        angle_fanout=2,
+    )
+    assert payload == {
+        'preset': 'tech-planning',
+        'include_base_query': False,
+        'angle_fanout': 2,
+        'count': 2,
+        'items': [
+            {'index': 0, 'text': 'q industry trends'},
+            {'index': 1, 'text': 'q competitors'},
+        ],
+    }
+
+
+def test_build_planned_angles_payload_skips_consensus_mode():
+    """Consensus mode should not grow extra JSON fields."""
+    assert grok_search._build_planned_angles_payload(
+        angles=[],
+        preset=None,
+        include_base_query=True,
+        angle_fanout=None,
+    ) is None
 
 
 def test_main_json_output():
@@ -573,6 +604,40 @@ def test_main_json_output():
     assert payload['summary'] == 'primary summary'
     assert payload['sources'][0]['url'] == 'https://example.com/a'
     assert 'consensus' in payload
+
+
+def test_main_json_output_includes_planned_angles_for_preset():
+    """--json should expose the actual preset-expanded angle plan."""
+    argv = ['grok_search.py', 'quoted query', '--preset', 'comparison', '--no-base-query', '--json']
+    stdout = io.StringIO()
+
+    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0):
+        return [{
+            'ok': True,
+            'model': 'model-a',
+            'content': 'primary summary',
+            'urls': ['https://example.com/a'],
+            'latency': 0.1,
+        }]
+
+    with patch.object(sys, 'argv', argv), \
+         patch.object(grok_search, '_load_config', return_value={
+             'api_key': 'k',
+             'base_url': 'https://example.test',
+             'models': {'default': ['model-a'], 'deep': ['model-a'], 'degrade': 'model-a'},
+         }), \
+         patch.object(grok_search, '_fanout', side_effect=fake_fanout), \
+         patch.object(grok_search, '_verify_sources', return_value=[
+             {'url': 'https://example.com/a', 'count': 1, 'status': 'unverified'}
+         ]), \
+         redirect_stdout(stdout):
+        grok_search.main()
+
+    payload = json.loads(stdout.getvalue())
+    assert payload['planned_angles']['preset'] == 'comparison'
+    assert payload['planned_angles']['include_base_query'] is False
+    assert payload['planned_angles']['count'] == 3
+    assert payload['planned_angles']['items'][0]['text'].startswith('quoted query ')
 
 
 # ===========================================================================
