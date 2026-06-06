@@ -33,6 +33,7 @@ Core options:
 - `--fanout N` — override consensus run count outside angle mode
 - `--preset comparison|controversy|recent-change|mechanism|deep-tech|tech-planning|discovery` — expand a common protocol into angles
 - `--angle "<text>"` — distinct evidence path; repeatable
+- `--angle-fanout N` — run each angle with N model passes; use with manual batching for high-value research
 - `--no-base-query` — in angle mode, run only explicit angles; useful for discovery sweeps
 - `--days N` — relative recency window
 - `--focus "<text>"` — soft source/platform hint
@@ -83,6 +84,9 @@ trend language: academic papers, patents, standards, industry engineering blogs,
 official roadmaps, X.com top experts, Hacker News/community discussion,
 regulation, capital, and ecosystem shifts. The self look must use only
 user-provided internal context and otherwise surface questions to evaluate.
+For high-value planning, prefer manual batches with `--angle-fanout 2` over one
+large run. Example: batch industry/trends + competitors, then market/customers +
+opportunities, then self fit if internal context is available.
 
 ## Full-coverage deep tech insight
 

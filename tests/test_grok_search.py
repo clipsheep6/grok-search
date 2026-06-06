@@ -251,6 +251,7 @@ def test_angle_mode_task_count():
         angles=angles,
         deep=False,
         fanout=10,       # should be ignored in angle mode
+        angle_fanout=None,
         include_base_query=True,
         model=None,
         models=models,
@@ -273,7 +274,7 @@ def test_angle_mode_fanout_does_not_change_count():
     for fanout_val in [1, 2, 5, 10, None]:
         tasks = grok_search._plan_tasks(
             query='q', angles=angles, deep=False,
-            fanout=fanout_val, include_base_query=True, model=None, models=models,
+            fanout=fanout_val, angle_fanout=None, include_base_query=True, model=None, models=models,
             build_query_fn=build_fn,
         )
         assert len(tasks) == 3, (
@@ -292,7 +293,7 @@ def test_consensus_mode_fanout_respected():
 
     tasks = grok_search._plan_tasks(
         query='q', angles=[], deep=False,
-        fanout=5, include_base_query=True, model=None, models=models,
+        fanout=5, angle_fanout=None, include_base_query=True, model=None, models=models,
         build_query_fn=build_fn,
     )
     assert len(tasks) == 5
@@ -625,6 +626,7 @@ def test_compare_protocol_preserves_head_to_head_angle():
         angles=['A vs B direct benchmarks', 'A limits', 'B limits'],
         deep=False,
         fanout=None,
+        angle_fanout=None,
         include_base_query=True,
         model=None,
         models=models,
@@ -685,6 +687,7 @@ def test_angle_mode_query_roles_are_layered():
         angles=['academic papers', 'GitHub issues'],
         deep=False,
         fanout=None,
+        angle_fanout=None,
         include_base_query=True,
         model=None,
         models=models,
@@ -708,6 +711,7 @@ def test_angle_mode_can_skip_base_query():
         angles=['academic papers', 'GitHub issues', 'industry docs'],
         deep=False,
         fanout=None,
+        angle_fanout=None,
         include_base_query=False,
         model=None,
         models=models,
@@ -715,6 +719,31 @@ def test_angle_mode_can_skip_base_query():
     )
     assert len(tasks) == 3
     assert all(':angle_path' in task[0] for task in tasks)
+
+
+def test_angle_mode_supports_per_angle_fanout():
+    """Angle fanout should run each angle through multiple model passes."""
+    models = {
+        'default': ['model-a', 'model-b'],
+        'deep': ['model-a', 'model-b', 'model-c'],
+        'degrade': 'model-a',
+    }
+    build_fn = lambda q, **kw: f'prompt:{q}:{kw.get("role")}'
+    tasks = grok_search._plan_tasks(
+        query='base query',
+        angles=['industry trends', 'competition'],
+        deep=False,
+        fanout=None,
+        angle_fanout=2,
+        include_base_query=False,
+        model=None,
+        models=models,
+        build_query_fn=build_fn,
+    )
+    assert len(tasks) == 4
+    assert [task[1] for task in tasks] == ['model-a', 'model-b', 'model-a', 'model-b']
+    assert tasks[0][2].startswith('angle[0].run[0]')
+    assert tasks[1][2].startswith('angle[0].run[1]')
 
 
 def test_build_query_adds_axis_specific_overlay():
@@ -770,6 +799,7 @@ def test_landscape_scan_protocol_defaults_to_three_deep_runs():
         angles=[],
         deep=True,
         fanout=None,
+        angle_fanout=None,
         include_base_query=True,
         model=None,
         models=models,

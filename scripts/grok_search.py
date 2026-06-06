@@ -992,6 +992,7 @@ def _plan_tasks(
     angles: List[str],
     deep: bool,
     fanout: Optional[int],
+    angle_fanout: Optional[int],
     include_base_query: bool,
     model: Optional[str],
     models: Dict[str, Any],
@@ -999,8 +1000,8 @@ def _plan_tasks(
 ) -> List[Tuple[str, str, str]]:
     """Return [(prompt, model_name, label)] for _fanout.
 
-    Angle mode (angles non-empty): one task per (base query + each angle),
-    round-robin across the ladder.
+    Angle mode (angles non-empty): one task per angle by default, or
+    angle_fanout tasks per angle when requested, round-robin across the ladder.
     Consensus mode: same query, heterogeneous models, fanout times.
     """
     if model:
@@ -1010,14 +1011,18 @@ def _plan_tasks(
 
     tasks: List[Tuple[str, str, str]] = []
     if angles:
-        # Angle mode: optional base query, plus one task per angle.
+        # Angle mode: optional base query, plus one or more runs per angle.
         items = ([query] if include_base_query else []) + angles
+        runs_per_angle = angle_fanout if angle_fanout is not None else 1
+        runs_per_angle = max(1, runs_per_angle)
         for i, item in enumerate(items):
-            mdl = ladder[i % len(ladder)]
             role = 'synthesis_backbone' if include_base_query and i == 0 else 'angle_path'
             prompt = build_query_fn(item, deep=deep, breadth=deep, role=role)
-            label = f'angle[{i}]:{mdl}'
-            tasks.append((prompt, mdl, label))
+            for run_idx in range(runs_per_angle):
+                mdl = ladder[(i * runs_per_angle + run_idx) % len(ladder)]
+                suffix = f'.run[{run_idx}]' if runs_per_angle > 1 else ''
+                label = f'angle[{i}]{suffix}:{mdl}'
+                tasks.append((prompt, mdl, label))
     else:
         # Consensus mode: same query, heterogeneous models concurrently.
         n = fanout if fanout is not None else (3 if deep else 2)
@@ -1047,6 +1052,8 @@ def main() -> None:
                         help='Expand a common research protocol into explicit angles when --angle is omitted')
     parser.add_argument('--angle', action='append', default=[],
                         help='Explicit research angle (repeatable); each runs concurrently')
+    parser.add_argument('--angle-fanout', type=_positive_int, default=None,
+                        help='Run each angle with N model passes; use with manual batching for high-value research')
     parser.add_argument('--no-base-query', action='store_true',
                         help='In angle mode, skip the extra base query and run only the explicit angles')
     parser.add_argument('--days', type=_positive_int, help='Recency window: prefer sources from the last N days')
@@ -1080,7 +1087,7 @@ def main() -> None:
 
     # Warn if --fanout is given alongside angle mode (it is ignored there).
     if angles and args.fanout is not None:
-        print('⚠️  --fanout is ignored in angle mode', file=sys.stderr)
+        print('⚠️  --fanout is ignored in angle mode; use --angle-fanout for per-angle runs', file=sys.stderr)
 
     config = _load_config()
     models = _resolve_models(config)
@@ -1104,6 +1111,7 @@ def main() -> None:
         angles=angles,
         deep=args.deep,
         fanout=args.fanout,
+        angle_fanout=args.angle_fanout,
         include_base_query=not args.no_base_query,
         model=args.model,
         models=models,
