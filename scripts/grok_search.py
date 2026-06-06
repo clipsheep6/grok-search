@@ -296,7 +296,11 @@ def _verify_url(
                 verify=verify_ssl,
             ) as response:
                 code = response.status_code
-        except (requests.MissingSchema, requests.InvalidSchema, requests.InvalidURL):
+        except (
+            requests.exceptions.MissingSchema,
+            requests.exceptions.InvalidSchema,
+            requests.exceptions.InvalidURL,
+        ):
             return _URL_STATUS_DEAD
         except requests.RequestException:
             return _URL_STATUS_UNVERIFIED

@@ -508,6 +508,17 @@ def test_verify_sources_applies_statuses():
     assert [row['status'] for row in rows] == ['live', 'dead', 'unverified']
 
 
+def test_verify_url_invalid_url_is_dead():
+    """Invalid URL syntax should be classified as dead, not crash verification."""
+    status = grok_search._verify_url(
+        'not-a-url',
+        verify_ssl=False,
+        disable_proxy=True,
+        deadline_ts=time.time() + 10,
+    )
+    assert status == 'dead'
+
+
 def test_build_output_payload_minimal_schema():
     """The JSON wrapper should stay minimal and stable."""
     payload = grok_search._build_output_payload(
