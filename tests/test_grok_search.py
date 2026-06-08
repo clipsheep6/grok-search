@@ -466,7 +466,7 @@ def test_main_degrade_reuses_global_deadline():
     argv = ['grok_search.py', 'quoted query', '--deadline', '7']
     observed = {}
 
-    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0):
+    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0, on_result=None):
         observed['fanout_deadline_ts'] = deadline_ts
         return [{'ok': False, 'model': 'model-a', 'error': 'boom', 'content': '', 'urls': []}]
 
@@ -573,6 +573,35 @@ def test_verify_sources_applies_statuses():
     assert [row['status'] for row in rows] == ['live', 'dead', 'unverified']
 
 
+def test_verification_warmup_reuses_completed_checks():
+    """Warm verification should start before fanout ends and reuse those results."""
+    calls: List[str] = []
+
+    def fake_verifier(url, **kwargs):
+        calls.append(url)
+        return 'live' if url.endswith('/a') else 'dead'
+
+    warmup = grok_search._VerificationWarmup(
+        enabled=True,
+        deadline_ts=time.time() + 30,
+        sources_limit=5,
+        concurrency=2,
+        verify_ssl=True,
+        disable_proxy=True,
+        verifier=fake_verifier,
+    )
+    warmup.update({
+        'ok': True,
+        'urls': ['https://example.com/a', 'https://example.com/b'],
+    })
+    rows = warmup.finalize([
+        ('https://example.com/a', 2),
+        ('https://example.com/b', 1),
+    ])
+    assert sorted(calls) == ['https://example.com/a', 'https://example.com/b']
+    assert [row['status'] for row in rows] == ['live', 'dead']
+
+
 def test_verify_url_invalid_url_is_dead():
     """Invalid URL syntax should be classified as dead, not crash verification."""
     status = grok_search._verify_url(
@@ -641,14 +670,17 @@ def test_main_json_output():
     argv = ['grok_search.py', 'quoted query', '--json']
     stdout = io.StringIO()
 
-    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0):
-        return [{
+    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0, on_result=None):
+        result = {
             'ok': True,
             'model': 'model-a',
             'content': 'primary summary',
             'urls': ['https://example.com/a'],
             'latency': 0.1,
-        }]
+        }
+        if on_result is not None:
+            on_result(result)
+        return [result]
 
     with patch.object(sys, 'argv', argv), \
          patch.object(grok_search, '_load_config', return_value={
@@ -675,14 +707,17 @@ def test_main_json_output_includes_planned_angles_for_preset():
     argv = ['grok_search.py', 'quoted query', '--preset', 'comparison', '--no-base-query', '--json']
     stdout = io.StringIO()
 
-    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0):
-        return [{
+    def fake_fanout(backend, tasks, max_tokens, deadline_ts, max_workers, stagger_s=0.0, on_result=None):
+        result = {
             'ok': True,
             'model': 'model-a',
             'content': 'primary summary',
             'urls': ['https://example.com/a'],
             'latency': 0.1,
-        }]
+        }
+        if on_result is not None:
+            on_result(result)
+        return [result]
 
     with patch.object(sys, 'argv', argv), \
          patch.object(grok_search, '_load_config', return_value={

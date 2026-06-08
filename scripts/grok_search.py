@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -378,6 +378,123 @@ def _verify_sources(
                     idx, status = fut.result()
                     sources[idx]['status'] = status
     return sources
+
+
+class _VerificationWarmup:
+    """Warm URL verification during fanout so finalization has less tail latency."""
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        deadline_ts: Optional[float],
+        sources_limit: int,
+        concurrency: int,
+        verify_ssl: bool,
+        disable_proxy: bool,
+        verifier: Callable[..., str] = _verify_url,
+    ) -> None:
+        self.enabled = enabled
+        self.deadline_ts = deadline_ts
+        self.sources_limit = max(1, sources_limit)
+        self.verify_ssl = verify_ssl
+        self.disable_proxy = disable_proxy
+        self.verifier = verifier
+        self._counts: Counter = Counter()
+        self._submitted: Dict[str, Future] = {}
+        self._statuses: Dict[str, str] = {}
+        self._lock = threading.Lock()
+        self._executor: Optional[ThreadPoolExecutor] = None
+        if enabled:
+            workers = min(self.sources_limit, max(1, concurrency))
+            self._executor = ThreadPoolExecutor(max_workers=workers)
+
+    def update(self, result: Dict[str, Any]) -> None:
+        if not self.enabled or not result.get('ok') or self._executor is None:
+            return
+        if (_deadline_remaining(self.deadline_ts) or 0.0) <= 0:
+            return
+        urls = set(result.get('urls') or [])
+        if not urls:
+            return
+        with self._lock:
+            self._counts.update(urls)
+            ranked_urls = [
+                url for url, _ in sorted(
+                    self._counts.items(),
+                    key=lambda kv: (-kv[1], kv[0]),
+                )[:self.sources_limit]
+            ]
+            for url in ranked_urls:
+                if url in self._submitted or url in self._statuses:
+                    continue
+                self._submitted[url] = self._executor.submit(
+                    self.verifier,
+                    url,
+                    verify_ssl=self.verify_ssl,
+                    disable_proxy=self.disable_proxy,
+                    deadline_ts=self.deadline_ts,
+                )
+
+    def finalize(self, consensus: List[Tuple[str, int]]) -> List[Dict[str, Any]]:
+        shown = consensus[:self.sources_limit]
+        rows = [
+            {'url': url, 'count': count, 'status': _URL_STATUS_UNVERIFIED}
+            for (url, count) in shown
+        ]
+        if not self.enabled:
+            return rows
+        if (_deadline_remaining(self.deadline_ts) or 0.0) <= 0:
+            self.close()
+            return rows
+
+        url_to_row = {row['url']: row for row in rows}
+        pending: Dict[Future, str] = {}
+        with self._lock:
+            for url in url_to_row:
+                status = self._statuses.get(url)
+                if status is not None:
+                    url_to_row[url]['status'] = status
+                    continue
+                fut = self._submitted.get(url)
+                if fut is None and self._executor is not None:
+                    fut = self._executor.submit(
+                        self.verifier,
+                        url,
+                        verify_ssl=self.verify_ssl,
+                        disable_proxy=self.disable_proxy,
+                        deadline_ts=self.deadline_ts,
+                    )
+                    self._submitted[url] = fut
+                if fut is not None:
+                    pending[fut] = url
+
+        if pending:
+            timeout = _deadline_remaining(self.deadline_ts)
+            if timeout is not None and timeout > 0:
+                try:
+                    for fut in as_completed(pending, timeout=timeout):
+                        url = pending[fut]
+                        status = fut.result()
+                        self._statuses[url] = status
+                        url_to_row[url]['status'] = status
+                except TimeoutError:
+                    pass
+            for fut, url in pending.items():
+                if fut.done() and url_to_row[url]['status'] == _URL_STATUS_UNVERIFIED:
+                    try:
+                        status = fut.result()
+                    except Exception:
+                        status = _URL_STATUS_UNVERIFIED
+                    self._statuses[url] = status
+                    url_to_row[url]['status'] = status
+        self.close()
+        return rows
+
+    def close(self) -> None:
+        if self._executor is not None:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor = None
 
 
 def _build_output_payload(
@@ -869,7 +986,8 @@ def _guarded_run(backend: Backend, prompt: str, model: str, max_tokens: Optional
 
 
 def _fanout(backend: Backend, tasks: List[Tuple[str, str, str]], max_tokens: Optional[int],
-            deadline_ts: float, max_workers: int, stagger_s: float = 0.0) -> List[Dict[str, Any]]:
+            deadline_ts: float, max_workers: int, stagger_s: float = 0.0,
+            on_result: Optional[Callable[[Dict[str, Any]], None]] = None) -> List[Dict[str, Any]]:
     """tasks = [(prompt, model, label)]. Concurrent; all work shares one deadline budget."""
     results: List[Dict[str, Any]] = []
     t0 = time.time()
@@ -888,7 +1006,10 @@ def _fanout(backend: Backend, tasks: List[Tuple[str, str, str]], max_tokens: Opt
         try:
             timeout = max(0.0, deadline_ts - time.time())
             for fut in as_completed(futures, timeout=timeout):
-                results.append(fut.result())
+                result = fut.result()
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
                 collected.add(fut)
         except TimeoutError:
             for fut, (model, lbl) in futures.items():
@@ -896,7 +1017,10 @@ def _fanout(backend: Backend, tasks: List[Tuple[str, str, str]], max_tokens: Opt
                     continue
                 if fut.done():
                     try:
-                        results.append(fut.result())
+                        result = fut.result()
+                        results.append(result)
+                        if on_result is not None:
+                            on_result(result)
                         collected.add(fut)
                     except Exception:
                         pass
@@ -1184,9 +1308,18 @@ def main() -> None:
     print(f'· {len(tasks)} run(s) [{tier}]: {", ".join(t[1] for t in tasks)}', file=sys.stderr)
     _t0 = time.time()
     deadline_ts = _t0 + args.deadline
+    verification_warmup = _VerificationWarmup(
+        enabled=args.verify_urls,
+        deadline_ts=deadline_ts,
+        sources_limit=args.sources_limit,
+        concurrency=concurrency,
+        verify_ssl=backend.verify_ssl,
+        disable_proxy=_coerce_bool(config.get('disable_proxy', False)),
+    )
     results = _fanout(
         backend, tasks, max_tokens, deadline_ts,
         max_workers=concurrency, stagger_s=(stagger_ms / 1000.0),
+        on_result=verification_warmup.update,
     )
 
     # --- Degrade: if nothing succeeded, try a single light model -------------
@@ -1204,15 +1337,7 @@ def main() -> None:
             sys.exit(1)
 
     merged = _merge_consensus(results)
-    source_rows = _verify_sources(
-        merged.get('consensus') or [],
-        verify_urls=args.verify_urls,
-        deadline_ts=deadline_ts,
-        sources_limit=args.sources_limit,
-        concurrency=concurrency,
-        verify_ssl=backend.verify_ssl,
-        disable_proxy=_coerce_bool(config.get('disable_proxy', False)),
-    )
+    source_rows = verification_warmup.finalize(merged.get('consensus') or [])
     primary = merged.get('primary') or {}
     payload = _build_output_payload(
         query=query,
