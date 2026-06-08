@@ -20,28 +20,35 @@ cd /path/to/skills/grok-search
 python3 scripts/grok_search.py "<query>" [options]
 ```
 
-Core flags:
+Common flags:
 
 - `--deep` — 3-way breadth fanout
 - `--preset comparison|controversy|recent-change|mechanism|deep-tech|tech-planning|discovery`
 - `--angle "<text>"` — repeat for explicit evidence paths
-- `--angle-fanout N` — extra passes per angle; use only for high-value manual batches
-- `--no-base-query` — angle mode without the extra backbone query; good for discovery
 - `--days N` — recency window
 - `--focus "<text>"` — soft source/platform hint
 - `--verify-urls` — best-effort final URL status
 - `--json` — machine-readable wrapper; angle/preset mode includes `planned_angles`
-- `--concurrency N`, `--stagger-ms N`, `--deadline N`
 
-`--deadline` is a shared wall-clock budget for fanout, degrade, and URL checks.
-It can drop/skip slow work; it is not a hard process kill.
-When `--stagger-ms` is omitted, heavier batches auto-space launches more
-aggressively than light calls to reduce proxy burst retries.
+Advanced research controls:
+
+- `--no-base-query` — angle mode without the extra backbone query; good for discovery
+- `--angle-fanout N` — extra passes per angle; use only for high-value manual batches
+
+The script already does internal consensus sampling by default. External callers
+usually do not need to set `--fanout`; prefer better query shaping, primary-source
+focus, or evidence angles first.
+
+Runtime/debug controls such as `--deadline`, `--concurrency`, `--stagger-ms`,
+`--model`, `--max-tokens`, `--sources-limit`, and `--dump-raw` exist, but they
+are not default planning tools. Use them only when the environment, debugging,
+or a live evaluation requires them.
 
 Hard CLI rules:
 
 - Quote the main query.
-- Default is 2-run consensus; omit `--fanout` unless changing that.
+- Default is 2-run consensus; do not tune sampling knobs unless evidence is too
+  thin or the run is part of an evaluation.
 - Use either `--preset` or explicit `--angle`, not both. If explicit `--angle`
   is present, the script ignores `--preset`.
 
@@ -76,6 +83,16 @@ Scenario defaults:
 Preset rule: preset is a starting protocol, not an execution obligation. Preserve
 the useful shape and judge evidence quality over source count. If pruning any
 preset axis, switch from `--preset` to explicit `--angle` commands.
+
+## Use Strategy
+
+Search is a loop, not a one-shot report generator:
+
+1. Start broad with one well-shaped query.
+2. Split only when real evidence branches appear.
+3. Drill into 2-4 branches; avoid spraying many near-duplicate angles.
+4. Stop when primary sources settle the question.
+5. Re-search only if the current evidence still cannot support the next decision.
 
 ## Angle Rules
 
@@ -140,14 +157,6 @@ over repeated secondary links.
 - Mostly `×1` with no primary source: tighten scope, do not add more angles.
 - Social claims unsupported by academic/industry/adoption axes remain signals.
 - Strong vendor narrative with weak GitHub/operator evidence is incomplete.
-
-## Research Loop
-
-1. Broad: one well-shaped query.
-2. Split: identify 2-4 real branches or evidence axes.
-3. Drill: targeted angle batches first; add `--deep` only when needed.
-4. Cross-check: primary/authoritative/fresh sources first.
-5. Synthesize: report mode keeps breadth; action mode collapses to decisions.
 
 ## Quality Check
 

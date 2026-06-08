@@ -1223,35 +1223,41 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description='Concurrent consensus web search over a grok2api reverse proxy.')
     parser.add_argument('query', help='Search query (quote it: "..."). Use --angle for multi-angle mode.')
-    parser.add_argument('--deep', action='store_true',
+
+    common = parser.add_argument_group('common strategy')
+    common.add_argument('--deep', action='store_true',
                         help='Deep research: breadth extraction + heterogeneous fanout + consensus')
-    parser.add_argument('--fanout', type=_positive_int, default=None,
-                        help='Concurrent runs (default 2; --deep default 3); global cap applies')
-    parser.add_argument('--preset', choices=sorted(set(_PRESET_ANGLE_SUFFIXES) | set(_PRESET_ALIASES)),
+    common.add_argument('--preset', choices=sorted(set(_PRESET_ANGLE_SUFFIXES) | set(_PRESET_ALIASES)),
                         help='Expand a common research protocol into explicit angles when --angle is omitted')
-    parser.add_argument('--angle', action='append', default=[],
+    common.add_argument('--angle', action='append', default=[],
                         help='Explicit research angle (repeatable); each runs concurrently')
-    parser.add_argument('--angle-fanout', type=_positive_int, default=None,
-                        help='Run each angle with N model passes; use with manual batching for high-value research')
-    parser.add_argument('--no-base-query', action='store_true',
-                        help='In angle mode, skip the extra base query and run only the explicit angles')
-    parser.add_argument('--days', type=_positive_int, help='Recency window: prefer sources from the last N days')
-    parser.add_argument('--focus', help='Soft source/platform/angle hint (proxy: prompt-level)')
-    parser.add_argument('--sources-limit', type=_positive_int, default=30, help='Max source URLs to print')
-    parser.add_argument('--concurrency', type=_positive_int, default=None,
-                        help='Global in-flight request cap (CLI overrides config; fallback default 4)')
-    parser.add_argument('--stagger-ms', type=_nonnegative_int, default=None,
-                        help='Delay between launching upstream requests (CLI overrides config; auto-defaults to 1000ms when concurrency > 2)')
-    parser.add_argument('--deadline', type=_positive_int, default=DEFAULT_DEADLINE,
-                        help='Wall-clock ceiling for the whole search in seconds (default 180); shared across fanout and degrade')
-    parser.add_argument('--model', help='Force a single model (overrides the tier ladder)')
-    parser.add_argument('--verify-urls', action='store_true',
+    common.add_argument('--days', type=_positive_int, help='Recency window: prefer sources from the last N days')
+    common.add_argument('--focus', help='Soft source/platform/angle hint (proxy: prompt-level)')
+    common.add_argument('--verify-urls', action='store_true',
                         help='Best-effort verification for the final printed source URLs')
-    parser.add_argument('--json', action='store_true',
+    common.add_argument('--json', action='store_true',
                         help='Emit a minimal machine-readable JSON wrapper instead of markdown')
-    parser.add_argument('--dump-raw', help='Write raw responses to a file')
-    parser.add_argument('--max-tokens', type=_positive_int, default=None,
-                        help='Per-tier safety ceiling for response tokens')
+
+    advanced = parser.add_argument_group('advanced research controls')
+    advanced.add_argument('--no-base-query', action='store_true',
+                          help='In angle mode, skip the extra base query and run only the explicit angles')
+    advanced.add_argument('--angle-fanout', type=_positive_int, default=None,
+                          help='Run each angle with N model passes; use with manual batching for high-value research')
+    advanced.add_argument('--fanout', type=_positive_int, default=None,
+                          help='Concurrent runs in consensus mode (default 2; --deep default 3)')
+
+    runtime = parser.add_argument_group('runtime and debug controls')
+    runtime.add_argument('--sources-limit', type=_positive_int, default=30, help='Max source URLs to print')
+    runtime.add_argument('--concurrency', type=_positive_int, default=None,
+                         help='Global in-flight request cap (CLI overrides config; fallback default 4)')
+    runtime.add_argument('--stagger-ms', type=_nonnegative_int, default=None,
+                         help='Delay between launching upstream requests (CLI overrides config; auto-tuned by task shape)')
+    runtime.add_argument('--deadline', type=_positive_int, default=DEFAULT_DEADLINE,
+                         help='Wall-clock budget for the whole search in seconds (default 180)')
+    runtime.add_argument('--model', help='Force a single model (overrides the tier ladder)')
+    runtime.add_argument('--dump-raw', help='Write raw responses to a file')
+    runtime.add_argument('--max-tokens', type=_positive_int, default=None,
+                         help='Override per-tier response token ceiling')
     args = parser.parse_args()
 
     query = args.query.strip()
