@@ -9,7 +9,7 @@ Loaded from `config.json` (skill dir) or `~/.grok/config.json`:
 
 ```json
 { "api_key": "sk-...", "base_url": "https://host/proxy/grok",
-  "verify_ssl": false, "disable_proxy": true,
+  "verify_ssl": true, "disable_proxy": true,
   "concurrency": 5, "stagger_ms": 1000,
   "models": {
     "default": ["grok-4.3-high", "grok-4.20-multi-agent-low"],
@@ -20,7 +20,9 @@ Loaded from `config.json` (skill dir) or `~/.grok/config.json`:
 
 - `base_url` is auto-suffixed with `/v1`.
 - `disable_proxy:true` — ignore HTTP(S)_PROXY env vars.
-- `verify_ssl:false` — skip TLS verification (self-hosted proxies).
+- `verify_ssl:true` — verify TLS by default. If the proxy fails only on certificate
+  verification, the request layer retries once with `verify_ssl=false` for
+  compatibility with misconfigured/self-hosted proxies.
 - `concurrency` — default global in-flight cap when CLI `--concurrency` is omitted.
 - `stagger_ms` — delay between launching upstream requests; defaults to `1000` when effective concurrency is > 2, unless overridden to `0`.
 - `models` — the tier ladder; `--model M` overrides it. Unknown fields ignored.

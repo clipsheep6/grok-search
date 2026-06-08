@@ -102,6 +102,13 @@ def _is_retryable_error(exc: Exception) -> bool:
     return isinstance(exc, (requests.ConnectionError, requests.Timeout))
 
 
+def _is_tls_verification_error(exc: Exception) -> bool:
+    if isinstance(exc, requests.exceptions.SSLError):
+        return True
+    cause = getattr(exc, '__cause__', None)
+    return isinstance(cause, requests.exceptions.SSLError)
+
+
 def _retry_after_seconds(exc: Exception) -> Optional[float]:
     """Parse a Retry-After header (delta-seconds or RFC-1123 date) if present."""
     if not isinstance(exc, requests.HTTPError) or exc.response is None:
@@ -666,7 +673,7 @@ class ProxyBackend(Backend):
     name = 'proxy'
 
     def __init__(self, api_key: str, base_url: str, disable_proxy: bool = False,
-                 verify_ssl: bool = False, retries: int = DEFAULT_RETRIES):
+                 verify_ssl: bool = True, retries: int = DEFAULT_RETRIES):
         self.api_key = api_key
         self.base_url = _normalize_base_url(base_url)
         self.verify_ssl = verify_ssl
@@ -740,7 +747,10 @@ class ProxyBackend(Backend):
                          deadline_ts: Optional[float] = None) -> Dict[str, Any]:
         url = f'{self.base_url}/chat/completions'
         last_exc: Optional[Exception] = None
-        for attempt in range(self.retries + 1):
+        allow_insecure_fallback = self.verify_ssl
+        verify_ssl = self.verify_ssl
+        attempt = 0
+        while attempt <= self.retries:
             # --- Deadline check before each attempt ---------------------------
             if deadline_ts is not None:
                 remaining = deadline_ts - time.time()
@@ -753,7 +763,7 @@ class ProxyBackend(Backend):
             # ------------------------------------------------------------------
             try:
                 with self.session.post(url, headers=headers, json=payload, timeout=timeout,
-                                       verify=self.verify_ssl, stream=True) as response:
+                                       verify=verify_ssl, stream=True) as response:
                     response.raise_for_status()
                     ctype = response.headers.get('content-type', '')
                     if 'text/event-stream' in ctype:
@@ -761,6 +771,13 @@ class ProxyBackend(Backend):
                     return response.json()
             except Exception as exc:  # noqa: BLE001 — retry decided by error class
                 last_exc = exc
+                if allow_insecure_fallback and _is_tls_verification_error(exc):
+                    allow_insecure_fallback = False
+                    verify_ssl = False
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                    print('⚠️  TLS verification failed; retrying once with verify_ssl=false',
+                          file=sys.stderr)
+                    continue
                 if attempt >= self.retries or not _is_retryable_error(exc):
                     raise
                 delay = _retry_after_seconds(exc)
@@ -776,6 +793,7 @@ class ProxyBackend(Backend):
                 print(f'⚠️  transient error ({exc}); retry {attempt + 1}/{self.retries} in {delay:.1f}s',
                       file=sys.stderr)
                 time.sleep(delay)
+                attempt += 1
         raise last_exc if last_exc else RuntimeError('request failed')
 
     def run(self, *, prompt: str, model: str, max_tokens: Optional[int],
@@ -993,7 +1011,13 @@ def _resolve_concurrency(config: Dict[str, Any], cli_value: Optional[int]) -> in
     return DEFAULT_CONCURRENCY
 
 
-def _resolve_stagger_ms(config: Dict[str, Any], cli_value: Optional[int], concurrency: int) -> int:
+def _resolve_stagger_ms(
+    config: Dict[str, Any],
+    cli_value: Optional[int],
+    concurrency: int,
+    task_count: int,
+    deep: bool,
+) -> int:
     if cli_value is not None:
         return max(0, cli_value)
     raw = config.get('stagger_ms')
@@ -1002,7 +1026,16 @@ def _resolve_stagger_ms(config: Dict[str, Any], cli_value: Optional[int], concur
     cfg_value = _coerce_positive_int(raw)
     if cfg_value is not None:
         return cfg_value
-    return DEFAULT_STAGGER_MS_HIGH_CONCURRENCY if concurrency > 2 else 0
+    if concurrency <= 2:
+        return 0
+    # Heavier batches are more likely to stampede the proxy even when in-flight
+    # concurrency is capped, so widen launch spacing as task count grows.
+    stagger_ms = DEFAULT_STAGGER_MS_HIGH_CONCURRENCY
+    if task_count >= 4 or (deep and task_count >= 3):
+        stagger_ms = 1500
+    if task_count >= 6:
+        stagger_ms = 2000
+    return stagger_ms
 
 
 # ============================================================================
@@ -1114,11 +1147,10 @@ def main() -> None:
     config = _load_config()
     models = _resolve_models(config)
     concurrency = _resolve_concurrency(config, args.concurrency)
-    stagger_ms = _resolve_stagger_ms(config, args.stagger_ms, concurrency)
     backend = ProxyBackend(
         api_key=config['api_key'], base_url=config['base_url'],
         disable_proxy=_coerce_bool(config.get('disable_proxy', False)),
-        verify_ssl=_coerce_bool(config.get('verify_ssl', False)),
+        verify_ssl=_coerce_bool(config.get('verify_ssl', True), True),
     )
     _CONCURRENCY_SEMAPHORE = threading.Semaphore(concurrency)
 
@@ -1138,6 +1170,13 @@ def main() -> None:
         model=args.model,
         models=models,
         build_query_fn=build_query,
+    )
+    stagger_ms = _resolve_stagger_ms(
+        config,
+        args.stagger_ms,
+        concurrency,
+        task_count=len(tasks),
+        deep=args.deep,
     )
 
     # --- Execute --------------------------------------------------------------

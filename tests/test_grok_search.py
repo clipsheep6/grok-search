@@ -59,6 +59,17 @@ class FakeResponse:
         pass
 
 
+class JsonResponse(FakeResponse):
+    """Minimal JSON response stand-in for ProxyBackend tests."""
+
+    def __init__(self, payload: Dict[str, Any], status_code: int = 200):
+        super().__init__([], content_type='application/json', status_code=status_code)
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
 class FastBackend(grok_search.Backend):
     """Returns immediately with real content."""
     name = 'fast'
@@ -346,6 +357,59 @@ def test_parse_sse_all_invalid_yields_empty():
     content = result['choices'][0]['message']['content']
     # Empty content from SSE means _guarded_run will mark it ok=False (fix #2).
     assert content == '', f"Expected empty content from all-invalid SSE, got: {repr(content)}"
+
+
+def test_proxy_backend_tls_failure_falls_back_to_insecure_once():
+    """Certificate verification failures should retry once with verify_ssl=False."""
+    import requests
+
+    backend = grok_search.ProxyBackend(
+        api_key='k',
+        base_url='https://example.test/proxy/grok',
+        disable_proxy=True,
+        verify_ssl=True,
+        retries=0,
+    )
+    calls: List[bool] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs['verify'])
+        if len(calls) == 1:
+            raise requests.exceptions.SSLError('certificate verify failed')
+        return JsonResponse({'ok': True})
+
+    with patch.object(backend.session, 'post', side_effect=fake_post):
+        result = backend._post_with_retry({}, {}, deadline_ts=time.time() + 30)
+
+    assert result == {'ok': True}
+    assert calls == [True, False]
+
+
+def test_proxy_backend_non_tls_error_does_not_fallback_insecure():
+    """Ordinary network failures should not trigger verify_ssl=False fallback."""
+    import requests
+
+    backend = grok_search.ProxyBackend(
+        api_key='k',
+        base_url='https://example.test/proxy/grok',
+        disable_proxy=True,
+        verify_ssl=True,
+        retries=0,
+    )
+    calls: List[bool] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs['verify'])
+        raise requests.exceptions.Timeout('timed out')
+
+    with patch.object(backend.session, 'post', side_effect=fake_post):
+        try:
+            backend._post_with_retry({}, {}, deadline_ts=time.time() + 30)
+            assert False, 'expected timeout'
+        except requests.exceptions.Timeout:
+            pass
+
+    assert calls == [True]
 
 
 def test_parse_sse_all_invalid_then_guarded_run_fails():
@@ -882,11 +946,14 @@ def test_resolve_concurrency_prefers_cli_then_config():
 
 def test_resolve_stagger_defaults_only_for_higher_concurrency():
     """Stagger should auto-enable only when concurrency is above 2, unless overridden."""
-    assert grok_search._resolve_stagger_ms({}, None, 2) == 0
-    assert grok_search._resolve_stagger_ms({}, None, 5) == grok_search.DEFAULT_STAGGER_MS_HIGH_CONCURRENCY
-    assert grok_search._resolve_stagger_ms({'stagger_ms': 250}, None, 5) == 250
-    assert grok_search._resolve_stagger_ms({'stagger_ms': 0}, None, 5) == 0
-    assert grok_search._resolve_stagger_ms({}, 400, 5) == 400
+    assert grok_search._resolve_stagger_ms({}, None, 2, task_count=2, deep=False) == 0
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=2, deep=False) == grok_search.DEFAULT_STAGGER_MS_HIGH_CONCURRENCY
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=4, deep=False) == 1500
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=3, deep=True) == 1500
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=6, deep=False) == 2000
+    assert grok_search._resolve_stagger_ms({'stagger_ms': 250}, None, 5, task_count=6, deep=True) == 250
+    assert grok_search._resolve_stagger_ms({'stagger_ms': 0}, None, 5, task_count=6, deep=True) == 0
+    assert grok_search._resolve_stagger_ms({}, 400, 5, task_count=6, deep=True) == 400
 
 
 def test_branch_drill_protocol_keeps_json_contract_stable():

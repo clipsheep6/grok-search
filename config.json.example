@@ -1,7 +1,7 @@
 {
   "api_key": "sk-your-key-here",
   "base_url": "https://your-grok2api-host/proxy/grok",
-  "verify_ssl": false,
+  "verify_ssl": true,
   "disable_proxy": true,
   "concurrency": 5,
   "stagger_ms": 1000,
