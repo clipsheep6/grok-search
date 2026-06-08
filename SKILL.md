@@ -51,12 +51,16 @@ full CLI contract.
 - **Quick lookup** — default consensus only
 - **Verified lookup** — default + `--verify-urls`
 - **Deep research** — `--deep`, optionally `--verify-urls`, prefer `--json` if another tool will continue
-- **Preset research** — use `--preset` for common comparison, controversy, recent-change, mechanism, deep-tech, tech-planning, or discovery protocols
-- **Custom multi-angle research** — use explicit `--angle` only when the preset does not fit
+- **Preset research** — use `--preset` as a starting protocol for common comparison, controversy, recent-change, mechanism, deep-tech, tech-planning, or discovery work
+- **Custom multi-angle research** — use explicit `--angle` when the preset does not fit, or when context lets you prune a preset safely
 - **Discovery sweeps** — prefer multiple small calls over one giant angle batch; for angle sweeps, `--no-base-query` is often the right default
 
 If the question is time-sensitive, add `--days N`. If domain authority matters,
 add `--focus`.
+
+Preset rule: do not run a preset mechanically when the user context makes one
+axis irrelevant. Preserve the useful protocol shape, then prune or split it into
+explicit `--angle` calls. Compare by evidence quality, not just source count.
 
 ## Angle rules
 
@@ -83,7 +87,11 @@ The industry/trends look should sample technical signal sources, not just macro
 trend language: academic papers, patents, standards, industry engineering blogs,
 official roadmaps, X.com top experts, Hacker News/community discussion,
 regulation, capital, and ecosystem shifts. The self look must use only
-user-provided internal context and otherwise surface questions to evaluate.
+user-provided internal context.
+
+If no internal context is provided, do not run the self axis. Use four explicit
+external angles instead: industry/trends, market/customers, competitors, and
+opportunities. Then list the missing self-fit questions separately in synthesis.
 For high-value planning, prefer manual batches with `--angle-fanout 2` over one
 large run. Example: batch industry/trends + competitors, then market/customers +
 opportunities, then self fit if internal context is available.
@@ -174,3 +182,8 @@ answer may still be useful, but coverage is thinner.
 In `--json` angle or preset mode, `planned_angles` records the actual expanded
 evidence paths, base-query policy, preset name, and per-angle fanout. Use it for
 replay and A/B evaluation; do not treat it as an automatic research plan.
+
+For A/B or live quality checks, judge both objective and subjective quality:
+wall time, ok runs, retries, unique and multi-cited sources, primary-source
+presence, decision coverage, noise, contradiction handling, and whether the
+answer supports the next Agent action.

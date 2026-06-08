@@ -78,6 +78,7 @@ run 或跳过后续校验，但它不是对底层网络请求的强制进程级 
 - **direct-comparison 角度**：比较类查询必须保留一个正面对比 angle，不能只拆成 `A` 和 `B` 各自描述。
 - **broad → drill**：先宽扫，再对 2-4 个分支各自深钻。不要一开始就把整个问题压成一个过深查询。
 - **discovery 多轮调用**：找方向时，优先多次调用 `grok_search.py`，每次只跑 1-2 个角度，而不是一次塞满所有轴。
+- **preset 起手，Agent 裁剪**：preset 用来降低起步成本，不是替代判断；如果某个轴和当前上下文无关，就改用显式 `--angle` 跳过它。
 - **recent + official focus**：查时效问题时用 `--days N`；查规范、API、政策时可加 `--focus "official docs"`。
 - **primary-source stop rule**：一旦已经拿到 authoritative URL，就停止继续搜索，改为 direct fetch/read。
 - **controversy split**：遇到低重叠或相互冲突的来源，不要强行合并成一个整齐答案；把分歧当成继续拆分的信号。
@@ -161,6 +162,7 @@ python3 scripts/grok_search.py "dynamic workflow for AI agents in 2026" \
 - 如果多个 angle 最终还是落回同一批域名、同一批 claims，说明你拆的不是角度，只是措辞变化，应该收缩 query。
 - 如果 angle 模式出来几乎全是 `×1`，且没有稳定 primary source，不要继续加角度；先缩窄范围。
 - 如果已经拿到 authoritative URL，继续多角度搜索的边际收益通常很低，改成 direct fetch/read。
+- 如果 `tech-planning` 没有用户提供的内部上下文，不要跑 self 轴；用显式 4 角度覆盖 industry / market / competitors / opportunity，并在综合阶段列出 self-fit 待答问题。
 - 如果社交轴上的热门说法无法被论文 / 官方 / GitHub 现实交叉支撑，只能保留为“信号”，不能直接当结论。
 - 如果论文很热、工业宣传很强，但 adoption 轴证据很弱，应把它标成 frontier / emerging，而不是 production-proven。
 - 如果官方叙事很强，但 issue / PR / RFC / design doc / integration code / migration / operator 证据显示真实方案与宣传差异很大，优先相信“已落地方案与摩擦”而不是 marketing 叙事。
@@ -175,6 +177,13 @@ python3 scripts/grok_search.py "dynamic workflow for AI agents in 2026" \
 - **报告型**：保留更宽的证据面、显式写出冲突证据、给出不确定性和开放问题
 - **实操型**：把证据压缩成决策动作，例如 `adopt / pilot / defer / avoid / monitor`
 - 如果某条证据不会改变技术路线，只会增加“背景知识”，那它更适合报告型，不适合实操型结论
+
+### A/B 质量评估
+
+不要只看客观计数。`unique_sources` 多可能只是噪声更大，`×N` 高也可能只是二手转述共振。场景测试应同时记录：
+
+- 客观指标：wall time、成功 run 数、retry/503、unique sources、multi-cited sources、primary/官方源数量
+- 主观质量：结论是否被一手源支撑、是否覆盖关键决策维度、是否暴露反例/限制、噪声源比例、是否能支持下一步 Agent 行动
 
 ### 开销取舍
 
