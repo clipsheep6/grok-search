@@ -52,6 +52,16 @@ Hard CLI rules:
 - Use either `--preset` or explicit `--angle`, not both. If explicit `--angle`
   is present, the script ignores `--preset`.
 
+Result handling rules:
+
+- Treat stdout as the result channel. In `--json` mode, parse stdout as JSON.
+- Treat stderr as diagnostics/progress. A `transient error ... retry` line is not
+  a failed search if the command exits 0 and stdout contains a valid result.
+- Do not switch to built-in fetch/search just because stderr contains retry,
+  503, TLS fallback, or URL verification warnings.
+- Fallback to another search tool only after a non-zero exit, empty/unparseable
+  stdout, or a result with no successful runs and no usable sources.
+
 See `README.md` for extended tactics and `references/api_reference.md` for the
 full CLI contract.
 

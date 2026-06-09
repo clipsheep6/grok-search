@@ -85,10 +85,14 @@ When `--json` is enabled, the script emits a script-owned wrapper with:
 | Symptom | Meaning / action |
 |---------|------------------|
 | `❌ Grok config not found` | copy `config.json.example` → `config.json` |
-| `· … retry` (stderr) | transient 429/5xx; auto-heals |
+| `· … retry` (stderr) | transient 429/5xx; diagnostic only if exit code is 0 and stdout has a valid result |
+| `⚠️ TLS verification failed; retrying once...` (stderr) | certificate verification fallback; diagnostic only if the command still exits 0 |
 | `⚠️ --fanout is ignored in angle mode` | expected when `--angle` is present |
 | `✗ <model>` in header | that run failed; answer still valid if ≥1 `✓` |
 | `signal · consensus: ...` | overlap summary across successful runs |
 | `· all runs failed; degrading…` | upstream overloaded; auto single-model retry |
 | `❌ search failed after degrade` | upstream down or bad key — check connectivity / `api_key` |
 | `⏱ run … exceeded deadline` | one run too slow; raise `--deadline` or ignore |
+
+Use command exit code plus stdout as the final success signal. Do not fallback to
+another search/fetch tool merely because stderr contains retry or warning lines.

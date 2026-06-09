@@ -1152,13 +1152,14 @@ def _resolve_stagger_ms(
         return cfg_value
     if concurrency <= 2:
         return 0
-    # Heavier batches are more likely to stampede the proxy even when in-flight
-    # concurrency is capped, so widen launch spacing as task count grows.
+    # Heavier angle/preset batches are more likely to stampede the proxy even
+    # when in-flight concurrency is capped, so widen launch spacing as task
+    # count grows. A little more launch spacing is cheaper than a 503 retry.
     stagger_ms = DEFAULT_STAGGER_MS_HIGH_CONCURRENCY
     if task_count >= 4 or (deep and task_count >= 3):
-        stagger_ms = 1500
-    if task_count >= 6:
         stagger_ms = 2000
+    if task_count >= 6:
+        stagger_ms = 2500
     return stagger_ms
 
 

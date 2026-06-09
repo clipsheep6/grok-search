@@ -983,9 +983,9 @@ def test_resolve_stagger_defaults_only_for_higher_concurrency():
     """Stagger should auto-enable only when concurrency is above 2, unless overridden."""
     assert grok_search._resolve_stagger_ms({}, None, 2, task_count=2, deep=False) == 0
     assert grok_search._resolve_stagger_ms({}, None, 5, task_count=2, deep=False) == grok_search.DEFAULT_STAGGER_MS_HIGH_CONCURRENCY
-    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=4, deep=False) == 1500
-    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=3, deep=True) == 1500
-    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=6, deep=False) == 2000
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=4, deep=False) == 2000
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=3, deep=True) == 2000
+    assert grok_search._resolve_stagger_ms({}, None, 5, task_count=6, deep=False) == 2500
     assert grok_search._resolve_stagger_ms({'stagger_ms': 250}, None, 5, task_count=6, deep=True) == 250
     assert grok_search._resolve_stagger_ms({'stagger_ms': 0}, None, 5, task_count=6, deep=True) == 0
     assert grok_search._resolve_stagger_ms({}, 400, 5, task_count=6, deep=True) == 400
